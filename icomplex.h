@@ -19,6 +19,13 @@
  *    Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston, MA 02110-1301, USA.
  */
 
+/*
+ * The icomplex<> template implements fixed precision (integer)
+ * complex numbers. The template is parameterized by the base integer
+ * type to use (i.e. int16_t, int32_t, int64_t) and the number of
+ * bits of the base integer type to use as fraction bits.
+ */
+
 # include  <complex>
 # include  <cassert>
 # include  <cmath>

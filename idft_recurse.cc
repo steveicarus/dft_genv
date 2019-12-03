@@ -27,6 +27,11 @@
 
 using namespace std;
 
+/*
+ * Do an integer version of the DFT, using a recursive method. This is
+ * a fixed point version of the dft_recurse.cc program.
+ */
+
 # define TRANS_SIGN (1)
 //# define TRANS_SIGN (-1)
 
