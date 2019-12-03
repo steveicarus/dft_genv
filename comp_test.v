@@ -92,7 +92,7 @@ module main;
    reg [$clog2(SAMPLES):0] dft_idx;
 
    // This is the device under test.
-   idft_comp_N4 #(.WIDTH(WIDTH), .FRAC(FRAC)) dut
+   idft_N4 #(.WIDTH(WIDTH), .FRAC(FRAC)) dut
      (.clk(clk),
       .reset(reset),
       .ready(ready),

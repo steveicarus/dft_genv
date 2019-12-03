@@ -42,4 +42,4 @@ comp_test.out: comp_test.v idft_comp.v
 	/usr/local/test/bin/iverilog -g2012 -o comp_test.out comp_test.v idft_comp.v
 
 idft_comp.v: idft_gen
-	./idft_gen --N=4 > idft_comp.v
+	./idft_gen --N=4 --name=idft_N4 > idft_comp.v
