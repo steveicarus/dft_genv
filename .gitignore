@@ -1,0 +1,16 @@
+
+*~
+*.o
+
+# Generated files
+dft_brute_force
+dft_brute_force_w
+dft_fftw3
+dft_recurse
+idft_brute_force
+idft_recurse
+
+idft_gen
+idft_comp.v
+comp_test.out
+dump.vcd
