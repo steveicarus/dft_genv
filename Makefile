@@ -39,7 +39,7 @@ idft_gen: idft_gen.cc
 	g++ -Wall -o idft_gen idft_gen.cc
 
 comp_test.out: comp_test.v idft_comp.v
-	/usr/local/test/bin/iverilog -g2012 -o comp_test.out comp_test.v idft_comp.v
+	/usr/local/test/bin/iverilog -g2012 -DUSE_SAMPLES=4 -o comp_test.out comp_test.v idft_comp.v
 
 idft_comp.v: idft_gen
-	./idft_gen --N=4 --name=idft_N4 > idft_comp.v
+	./idft_gen --N=4 --name=idft_slice > idft_comp.v

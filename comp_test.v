@@ -20,67 +20,40 @@
 `default_nettype none
 `timescale 1ps/1ps
 
-`define N4
 module main;
 
+   parameter SAMPLES = `USE_SAMPLES;
    parameter WIDTH = 24;
    parameter FRAC = 8;
 
-`ifdef N32
-   parameter SAMPLES = 32;
-   // This is the test data set.
-   reg [31:0][WIDTH-1:0] src_real, src_imag;
-   initial begin
-      src_real[ 0] =  (1<<FRAC);  src_imag[ 0] = 0;
-      src_real[ 1] =  (1<<FRAC);  src_imag[ 1] = 0;
-      src_real[ 2] =  (1<<FRAC);  src_imag[ 2] = 0;
-      src_real[ 3] =  (1<<FRAC);  src_imag[ 3] = 0;
-      src_real[ 4] =  (1<<FRAC);  src_imag[ 4] = 0;
-      src_real[ 5] =  (1<<FRAC);  src_imag[ 5] = 0;
-      src_real[ 6] =  (1<<FRAC);  src_imag[ 6] = 0;
-      src_real[ 7] =  (1<<FRAC);  src_imag[ 7] = 0;
-      src_real[ 8] = -(1<<FRAC);  src_imag[ 8] = 0;
-      src_real[ 9] = -(1<<FRAC);  src_imag[ 9] = 0;
-      src_real[10] = -(1<<FRAC);  src_imag[10] = 0;
-      src_real[11] = -(1<<FRAC);  src_imag[11] = 0;
-      src_real[12] = -(1<<FRAC);  src_imag[12] = 0;
-      src_real[13] = -(1<<FRAC);  src_imag[13] = 0;
-      src_real[14] = -(1<<FRAC);  src_imag[14] = 0;
-      src_real[15] = -(1<<FRAC);  src_imag[15] = 0;
-      src_real[16] =  (1<<FRAC);  src_imag[16] = 0;
-      src_real[17] =  (1<<FRAC);  src_imag[17] = 0;
-      src_real[18] =  (1<<FRAC);  src_imag[18] = 0;
-      src_real[19] =  (1<<FRAC);  src_imag[19] = 0;
-      src_real[20] =  (1<<FRAC);  src_imag[20] = 0;
-      src_real[21] =  (1<<FRAC);  src_imag[21] = 0;
-      src_real[22] =  (1<<FRAC);  src_imag[22] = 0;
-      src_real[23] =  (1<<FRAC);  src_imag[23] = 0;
-      src_real[24] = -(1<<FRAC);  src_imag[24] = 0;
-      src_real[25] = -(1<<FRAC);  src_imag[25] = 0;
-      src_real[26] = -(1<<FRAC);  src_imag[26] = 0;
-      src_real[27] = -(1<<FRAC);  src_imag[27] = 0;
-      src_real[28] = -(1<<FRAC);  src_imag[28] = 0;
-      src_real[29] = -(1<<FRAC);  src_imag[29] = 0;
-      src_real[30] = -(1<<FRAC);  src_imag[30] = 0;
-      src_real[31] = -(1<<FRAC);  src_imag[31] = 0;
-   end // initial begin
-`endif //  `ifdef N32
-`ifdef N4
-   // Expected output
-   //(    5.00000     0.00000) (00000500 00000000)
-   //(    0.00781    -0.99609) (00000002 ffffff01)
-   //(    3.00391     0.00000) (00000301 00000000)
-   //(    0.00781     1.00000) (00000002 00000100)
-
-   parameter SAMPLES = 4;
-   reg[3:0][WIDTH-1:0] src_real, src_imag;
-   initial begin
-      src_real[ 0] =  (2<<FRAC);  src_imag[ 0] = 0;
-      src_real[ 1] =  (1<<FRAC);  src_imag[ 1] = 0;
-      src_real[ 2] =  (2<<FRAC);  src_imag[ 2] = 0;
-      src_real[ 3] =  (0<<FRAC);  src_imag[ 3] = 0;
+   // This is the input sample set. The samples are kept into an 
+   reg [SAMPLES-1:0][WIDTH-1:0] src_real, src_imag;
+   initial begin : LOAD
+      integer fd;
+      integer rc;
+      real a, b;
+      int     idx;
+      reg [8*512-1:0] linebuf;
+      $display("SAMPLES = %0d, WIDTH = %0d, FRAC = %0d", SAMPLES, WIDTH, FRAC);
+      fd = $fopenr("comp_test_in.csv");
+      idx = 0;
+      while (idx < SAMPLES && ! $feof(fd) ) begin
+	 rc = $fgets(linebuf, fd);
+	 rc = $sscanf(linebuf, "%f, %f", a, b);
+	 if (rc < 1) a = 0.0;
+	 if (rc < 2) b = 0.0;
+	 src_real[idx] = a * (1<<FRAC);
+	 src_imag[idx] = b * (1<<FRAC);
+	 idx = idx+1;
+      end
+      $fclose(fd);
+      // Fill out remaining data with zeros.
+      while (idx < SAMPLES) begin
+	 src_real[idx] = 0;
+	 src_imag[idx] = 0;
+	 idx = idx+1;
+      end
    end
-`endif
 
    reg  clk;
    reg  reset;
@@ -92,7 +65,7 @@ module main;
    reg [$clog2(SAMPLES):0] dft_idx;
 
    // This is the device under test.
-   idft_N4 #(.WIDTH(WIDTH), .FRAC(FRAC)) dut
+   idft_slice #(.WIDTH(WIDTH), .FRAC(FRAC)) dut
      (.clk(clk),
       .reset(reset),
       .ready(ready),
@@ -111,9 +84,6 @@ module main;
       clk = 1;
       reset = 1;
       #1 clk = 0;
-      #1 clk = 1;
-      #1 clk = 0;
-      reset = 0;
       #1 clk = 1;
 
       for (dft_idx = 0 ; dft_idx < SAMPLES; dft_idx = dft_idx+1) begin
