@@ -24,6 +24,61 @@
 # include  <cstring>
 # include  <cassert>
 
+/*
+ * This program generates a verilog module to calculate a slice of the
+ * DFT of an input vector. The input is a complete vector of complex
+ * numbers, and the output is one component of the DFT of the input
+ * vector. The component selection is one of the inputs of the
+ * module. The format of the generated module is:
+ *
+ * module NAME
+ *   #(parameter WIDTH = WIDTH,
+ *     parameter FRAC  = FRAC)
+ *    (input                           clk,
+ *     input                           reset,
+ *     output                          ready,
+ *     output signed [WIDTH-1:0]       dft_real, dft_imag,
+ *     input     [$clog2(N)-1:0]       dft_idx,
+ *     input signed [N-1:0][WIDTH-1:0] src_real, src_imag);
+ *
+ *     [...]
+ *
+ * endmodule
+ *
+ * The input clk is a free-running clock, and the reset restarts the
+ * processing engine. Hold the reset high while setting up the other
+ * inputs, including the src_real and src_imag vectors (which are the
+ * real and imaginary components of the vector of complex values) and
+ * dft_idx, which selects which DFT output component to
+ * calculate. When these inputs are ready, set reset to low, and the
+ * module will process until the output ready signal goes high. At
+ * this point the dft_read and dft_imag are the complex value of the
+ * output component selected by dft_idx.
+ *
+ * To calculate another component, set reset back to high, then change
+ * any of the inputs, and lower the reset again to start the new
+ * calculation. Each calculation takes about log2(N) clocks. A
+ * complete output vector requires N calculations, so with only 1
+ * instantiation, the full DFT takes O(N*log2(N)) to compute. If there
+ * are enough hardware resources, the module can be instantiated many
+ * times to process multiple components in parallel. (Each output
+ * component depends only on the input vector and the output component
+ * address.)
+ *
+ * The module NAME is given on the command line with the --name=<NAME>
+ * command line flag, and N is given by the --N=<N> flag. The
+ * generator is designed to assume that N==2**k where k is an
+ * integer greater than 2. The output Verilog code is sent to
+ * stdout. So for example:
+ *
+ *    ./idft_gen --name=idft_N32 -N=32 > idft_N32.v
+ *
+ * For a description of the algorithm used, see dft_recurse.cc and
+ * idft_recurse.cc. The dft_recurse.cc program breaks down the FFT
+ * algorithm and explains how it works, and idft_recurse.cc
+ * demonstrates a fixed point version.
+ */
+
 # define TRANS_SIGN (1)
 using namespace std;
 
@@ -37,6 +92,12 @@ static size_t clog2(size_t N)
       return result;
 }
 
+/*
+ * Pack all the "w" constant factors into separate modules. All the W
+ * constants depend only on N (or decomposed N) and the output
+ * idx. Calculate a module W<N> for each N used by the main module,
+ * that takes as input the output idx and emits the proper constant value.
+ */
 void generate_W_modules(FILE*fd, size_t N, const char*base_name)
 {
       assert(N >= 2);
