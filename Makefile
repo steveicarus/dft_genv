@@ -7,7 +7,8 @@ all: dft_fftw3 \
      dft_brute_force_w \
      dft_recurse \
      idft_brute_force \
-     idft_recurse
+     idft_recurse \
+     idft_gen
 
 dft_fftw3: dft_fftw3.o read_values.o
 	$(CXX) -o dft_fftw3 dft_fftw3.o read_values.o -lfftw3
