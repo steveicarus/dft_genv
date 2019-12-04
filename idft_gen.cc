@@ -182,11 +182,11 @@ void generate_module(FILE*fd, size_t N, const char*base_name)
       fprintf(fd, "  #(parameter WIDTH = 24,\n");
       fprintf(fd, "    parameter FRAC  = 8\n");
       fprintf(fd, "    /* */)\n");
-      fprintf(fd, "   (input wire clk,\n");
-      fprintf(fd, "    input wire reset,\n");
-      fprintf(fd, "    output reg ready,\n");
+      fprintf(fd, "   (input wire  clk,\n");
+      fprintf(fd, "    input wire  reset,\n");
+      fprintf(fd, "    output wire ready,\n");
       fprintf(fd, "    // Single output component of DFT\n");
-      fprintf(fd, "    output reg signed [WIDTH-1:0] dft_real, dft_imag,\n");
+      fprintf(fd, "    output wire signed [WIDTH-1:0] dft_real, dft_imag,\n");
       fprintf(fd, "    // Which output component are we calculating?\n");
       fprintf(fd, "    input wire [%zu:0] dft_idx,\n", Nlog2-1);
       fprintf(fd, "    // ector of input samples\n");
@@ -204,16 +204,9 @@ void generate_module(FILE*fd, size_t N, const char*base_name)
 	    src[idx] = idx;
       string res = idft_math_recursive_gen(fd, N, base_name, src);
 
-      fprintf(fd, "    always @(posedge clk)\n");
-      fprintf(fd, "     if (reset) begin\n");
-      fprintf(fd, "       dft_real <= 0;\n");
-      fprintf(fd, "       dft_imag <= 0;\n");
-      fprintf(fd, "       ready    <= 1'b0;\n");
-      fprintf(fd, "     end else begin\n");
-      fprintf(fd, "       dft_real <= %s.creal;\n", res.c_str());
-      fprintf(fd, "       dft_imag <= %s.cimag;\n", res.c_str());
-      fprintf(fd, "       ready    <= %s_ready;\n", res.c_str());
-      fprintf(fd, "    end\n");
+      fprintf(fd, "    assign dft_real = %s.creal;\n", res.c_str());
+      fprintf(fd, "    assign dft_imag = %s.cimag;\n", res.c_str());
+      fprintf(fd, "    assign ready    = %s_ready;\n", res.c_str());
       fprintf(fd, "endmodule\n");
 }
 
