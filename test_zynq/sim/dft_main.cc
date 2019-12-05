@@ -21,6 +21,8 @@
  * This is the simulation engine for the SandyLinux sandbox AXI device.
  */
 
+# include  "priv.h"
+
 # define _STDC_FORMAT_MACROS
 # include  <complex>
 # include  <vector>
@@ -98,73 +100,67 @@ int main(int argc, char*argv[])
       fflush(stdout);
       simbus_axi4_wait(bus, 8, 0);
 
-      vector< complex<double> >src;
-      src.resize(32);
-      src[0] = 1.0;
-      src[1] = 1.0;
-      src[2] = 1.0;
-      src[3] = 1.0;
-      src[4] = 1.0;
-      src[5] = 1.0;
-      src[6] = 1.0;
-      src[7] = 1.0;
-      src[8] = -1.0;
-      src[9] = -1.0;
-      src[10] = -1.0;
-      src[11] = -1.0;
-      src[12] = -1.0;
-      src[13] = -1.0;
-      src[14] = -1.0;
-      src[15] = -1.0;
-      src[16] = 1.0;
-      src[17] = 1.0;
-      src[18] = 1.0;
-      src[19] = 1.0;
-      src[20] = 1.0;
-      src[21] = 1.0;
-      src[22] = 1.0;
-      src[23] = 1.0;
-      src[24] = -1.0;
-      src[25] = -1.0;
-      src[26] = -1.0;
-      src[27] = -1.0;
-      src[28] = -1.0;
-      src[29] = -1.0;
-      src[30] = -1.0;
-      src[31] = -1.0;
+      FILE*src_fd = fopen("dft_input.csv", "rt");
+      assert(src_fd);
+      vector< complex<double> >src = read_values_d(src_fd);
+      fclose(src_fd);
 
-	// Write the source data into the data memory.
-      for (size_t idx = 0 ; idx < src.size() ; idx += 1) {
+	// Write the source data into the data memory. The source data
+	// is written into the FPGA while the internal processing
+	// "reset" is held active in the CmdStatus register.
+      for (size_t idx = 0 ; idx < src.size() && idx < dft_samples ; idx += 1) {
 	    uint32_t tmp = src[idx].real() * (1<<dft_frac) + 0.5;
 	    dft_write32(bus, SRC_REAL + 4*idx, tmp);
       }
-      for (size_t idx = 0 ; idx < src.size() ; idx += 1) {
+      for (size_t idx = 0 ; idx < src.size() && idx < dft_samples ; idx += 1) {
 	    uint32_t tmp = src[idx].imag() * (1<<dft_frac) + 0.5;
 	    dft_write32(bus, SRC_IMAG + 4*idx, tmp);
       }
+
+      for (size_t idx = src.size() ; idx < dft_samples ; idx += 1)
+	    dft_write32(bus, SRC_REAL + 4*idx, 0);
+      for (size_t idx = src.size() ; idx < dft_samples ; idx += 1)
+	    dft_write32(bus, SRC_IMAG + 4*idx, 0);
 
       printf("Wait 4 clocks...\n");
       fflush(stdout);
       simbus_axi4_wait(bus, 4, 0);
 
+	// Given the source vector written into the FPGA, perform the
+	// processing by generating one component of the result at a
+	// time. Generate all N components to get the complete DFT.
       struct cpair_s { uint32_t real, imag; };
       vector<cpair_s> dst;
-      dst.resize(src.size());
+      dst.resize(dft_samples);
       for (size_t idx = 0 ; idx < dst.size() ; idx += 1) {
+	      // Set the reset bit...
+	    dft_write32(bus, DFT_CmdStatus, 1);
+	      // Select the output we want to calculate
 	    dft_write32(bus, DFT_IDX, idx);
+	      // and clear the reset bit.
 	    dft_write32(bus, DFT_CmdStatus, 0);
 
+	      // For smaller DFT vectors (i.e. 128 or so) the
+	      // processing is so fast that it practically finishes in
+	      // the time it takes to read the status. But put these
+	      // wait clocks in here to be a bit more realistic.
 	    printf("Wait 4 clocks...\n");
 	    fflush(stdout);
 	    simbus_axi4_wait(bus, 4, 0);
 
-	    dft_cmd_status = dft_read32(bus, DFT_CmdStatus);
-	    printf("DFT CmdStatus = 0x%08" PRIx32 "\n", dft_cmd_status);
+	      // After the processing is complete, the ready bit (bit
+	      // [1]) is set. Read the status to verify it, but again,
+	      // things go so fast, we'll probably not see it false.
+	    do {
+		  dft_cmd_status = dft_read32(bus, DFT_CmdStatus);
+		  printf("DFT CmdStatus = 0x%08" PRIx32 "\n", dft_cmd_status);
+	    } while ((dft_cmd_status & 0x02) == 0);
 
 	    dst[idx].real = dft_read32(bus, DFT_REAL);
 	    dst[idx].imag = dft_read32(bus, DFT_IMAG);
       }
 
+	// Dump the DFT that we got back from the hardware.
       for (size_t idx = 0 ; idx < dst.size() ; idx += 1) {
 	    printf("DFT[%2zu]: 0x%08x 0x%08x\n", idx,
 		   dst[idx].real, dst[idx].imag);

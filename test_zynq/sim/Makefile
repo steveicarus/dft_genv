@@ -18,9 +18,10 @@ CXXFLAGS = -I$(SIMBUS_INCDIR) -g -O
 
 all: dft_master
 
-O = dft_main.o
+O = dft_main.o read_values.o
 
 dft_master: $O
 	$(CXX) -o dft_master $O $(LIBS)
 
-dft_main.o: dft_main.cc
+dft_main.o: dft_main.cc priv.h
+read_values.o: read_values.cc priv.h
