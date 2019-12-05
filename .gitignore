@@ -14,3 +14,11 @@ idft_gen
 idft_comp.v
 comp_test.out
 dump.vcd
+
+test_zynq/sim/*.fst
+test_zynq/sim/*.lxt
+test_zynq/sim/dft_sim.log
+test_zynq/sim/dft_sim.out
+test_zynq/sim/dft_master
+test_zynq/ver/BUILD.v
+test_zynq/ver/idft_slice.v

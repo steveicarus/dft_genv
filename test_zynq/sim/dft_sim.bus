@@ -1,0 +1,37 @@
+
+bus {
+    protocol = "AXI4";
+
+    name = "dft_master";
+    pipe = "dft_master.pipe";
+
+    # We have t specify the bus clock. Here we define a clock
+    # with 6.67ns period. (150MHz)
+    CLOCK_high = 3333;
+    CLOCK_low  = 3333;
+
+    CLOCK_hold = 100;
+    CLOCK_setup = 200;
+
+    # The data and address widths will be declared by the devices,
+    # and the server will validate that they match. So there is
+    # nothing to be done about that here.
+
+    #
+    host    0 "master";
+    device  1 "DFT_REGS";
+}
+
+
+process {
+    name = "master";
+    exec = "./dft_master";
+    stdout = "-";
+}
+
+
+process {
+    name = "DFT_REGS";
+    exec = "vvp -v -msimbus dft_sim.out -fst -simbus-debug-mask=0 -simbus-version +simbus-DFT_REGS-bus=pipe:dft_master.pipe";
+    stdout = "dft_sim.log";
+}
