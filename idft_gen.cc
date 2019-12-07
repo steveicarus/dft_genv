@@ -105,13 +105,21 @@ static size_t clog2(size_t N)
  */
 void generate_W_modules(FILE*fd, size_t N, const char*base_name)
 {
-      assert(N >= 2);
+      assert(N > 2);
 
       size_t use_n = N;
       while (use_n > 2) {
 	    size_t use_n_log2 = clog2(use_n);
 	    double Nd = use_n;
 	    const complex<double> W = exp( complex<double>(0.0, TRANS_SIGN * 2*M_PI/Nd) );
+	    vector< complex<double> > Wrom;
+	    Wrom.resize(use_n);
+	    Wrom[0] = 1.0;
+	    Wrom[1] = W;
+	    for (size_t idx = 1 ; idx < use_n ; idx += 1) {
+		  Wrom[idx] = pow(W, idx);
+	    }
+
 	    fprintf(fd, "/* Table of pow(W[N=%zu], idx) values. */\n", use_n);
 	    fprintf(fd, "module %s$W%zu\n", base_name, use_n);
 	    fprintf(fd, "  #(parameter WIDTH = 24,\n");
@@ -119,25 +127,34 @@ void generate_W_modules(FILE*fd, size_t N, const char*base_name)
 	    fprintf(fd, "    /* */)\n");
 	    fprintf(fd, "   (input wire clk,\n");
 	    fprintf(fd, "    input wire [%zu:0] sel,\n", use_n_log2-1);
-	    fprintf(fd, "    output reg [WIDTH*2-1:0] w\n");
+	    fprintf(fd, "    output wire [WIDTH*2-1:0] w\n");
 	    fprintf(fd, "    /* */);\n");
-	    fprintf(fd, "    reg [WIDTH-1:0] w_creal [0 : %zu];\n", use_n-1);
-	    fprintf(fd, "    reg [WIDTH-1:0] w_cimag [0 : %zu];\n", use_n-1);
+	    for (size_t idx = 1 ; idx < use_n ; idx += 1) {
+		  fprintf(fd, "      // pow(W,%zu) = (%10.6f %10.6f)\n",
+			  idx, Wrom[idx].real(), Wrom[idx].imag());
+	    }
+
+
+	    fprintf(fd, "    reg [WIDTH-1:0] w_creal [%zu : 0];\n", use_n-1);
+	    fprintf(fd, "    reg [WIDTH-1:0] w_cimag [%zu : 0];\n", use_n-1);
+	    fprintf(fd, "    reg [WIDTH-1:0] w_creal_r, w_cimag_r;\n");
 	    fprintf(fd, "    initial begin\n");
 	    fprintf(fd, "      w_creal[0] = 1 << FRAC;\n");
+	    for (size_t idx = 1 ; idx < use_n ; idx += 1) {
+		  fprintf(fd, "      w_creal[%zu] = %f * (1 << FRAC);\n", idx, Wrom[idx].real());
+	    }
+	    fprintf(fd, "    end\n");
+	    fprintf(fd, "    initial begin\n");
 	    fprintf(fd, "      w_cimag[0] = 0;\n");
-	    fprintf(fd, "      w_creal[1] = %f * (1 << FRAC);\n", W.real());
-	    fprintf(fd, "      w_cimag[1] = %f * (1 << FRAC);\n", W.imag());
-	    for (size_t idx = 2 ; idx < use_n ; idx += 1) {
-		  const complex<double> tmp = pow(W, idx);
-		  fprintf(fd, "      // pow(W,%zu) = (%10.6f %10.6f)\n",
-			  idx, tmp.real(), tmp.imag());
-		  fprintf(fd, "      w_creal[%zu] = %f * (1 << FRAC);\n", idx, tmp.real());
-		  fprintf(fd, "      w_cimag[%zu] = %f * (1 << FRAC);\n", idx, tmp.imag());
+	    for (size_t idx = 1 ; idx < use_n ; idx += 1) {
+		  fprintf(fd, "      w_cimag[%zu] = %f * (1 << FRAC);\n", idx, Wrom[idx].imag());
 	    }
 	    fprintf(fd, "    end\n");
 	    fprintf(fd, "    always @(posedge clk)\n");
-	    fprintf(fd, "      w <= {w_creal[sel], w_cimag[sel]};\n");
+	    fprintf(fd, "      w_creal_r <= w_creal[sel];\n");
+	    fprintf(fd, "    always @(posedge clk)\n");
+	    fprintf(fd, "      w_cimag_r <= w_cimag[sel];\n");
+	    fprintf(fd, "    assign w = {w_creal_r, w_cimag_r};\n");
 	    fprintf(fd, "endmodule\n");
 	    use_n /= 2;
       }
@@ -145,9 +162,29 @@ void generate_W_modules(FILE*fd, size_t N, const char*base_name)
 
 /*
  * The blend module calculates the expression o = a + w*b, where all
- * the numbers are complex. The multiplications are registered, but
- * all the additions are combinational, so the expression takes one
- * clock to calculate.
+ * the numbers are complex. The multiplications are registered, and
+ * all the additions are in another register, so the expression takes
+ * two clocks to calculate.
+ *
+ * NOTE: The multiplications may overflow, that's a risk. But since we
+ * are doing fixed point arithmetic, some of that overflow is pushed
+ * off the right side of the decimal point. i.e:
+ *
+ *         iiiiiiii.ffff0000
+ *       * iiiiiiii.ffff0000
+ * ---------------------------------
+ * iiiiiiiiiiiiiiii.ffffffff
+ *
+ * With this example, WIDTH=12 and FRAC=4. After the multiplication,
+ * the result is, theoretically WIDTH=24, FRAC=8, but we want to
+ * convert it back to WIDTH=12/FRAC=4 and accept the overflow out of
+ * both ends. Do that by shifting the result right 4 bits and truncate
+ * the result to WIDTH=12. (I should add an overflow detector.)
+ *
+ * NOTE: The a input (a_real and a_imag) needs to be registered. This
+ * serves to purposes: it retimes it to match the w*b term, and
+ * prevents the a term becoming log(N) long combinational chain all
+ * the way up the DFT.
  */
 void generate_blend_module(FILE*fd, size_t N, const char*base_name)
 {
@@ -160,8 +197,8 @@ void generate_blend_module(FILE*fd, size_t N, const char*base_name)
       fprintf(fd, "    input  wire reset,\n");
       fprintf(fd, "    input  wire in_ready,\n");
       fprintf(fd, "    output reg  out_ready,\n");
-      fprintf(fd, "    output wire signed [WIDTH-1:0] o_real,\n");
-      fprintf(fd, "    output wire signed [WIDTH-1:0] o_imag,\n");
+      fprintf(fd, "    output reg  signed [WIDTH-1:0] o_real,\n");
+      fprintf(fd, "    output reg  signed [WIDTH-1:0] o_imag,\n");
       fprintf(fd, "    input  wire signed [WIDTH-1:0] a_real,\n");
       fprintf(fd, "    input  wire signed [WIDTH-1:0] a_imag,\n");
       fprintf(fd, "    input  wire signed [WIDTH-1:0] w_real,\n");
@@ -170,19 +207,33 @@ void generate_blend_module(FILE*fd, size_t N, const char*base_name)
       fprintf(fd, "    input  wire signed [WIDTH-1:0] b_imag\n");
       fprintf(fd, "    /* */);\n");
       fprintf(fd, "\n");
-      fprintf(fd, "    reg [WIDTH*2-1:0] wr_br;\n");
+      fprintf(fd, "    // First clock...\n");
+      fprintf(fd, "    reg [WIDTH-1:0]      a_real_r, a_imag_r;\n");
+      fprintf(fd, "    always @(posedge clk) begin\n");
+      fprintf(fd, "       a_real_r <= a_real;\n");
+      fprintf(fd, "       a_imag_r <= a_imag;\n");
+      fprintf(fd, "    end\n");
+      fprintf(fd, "    reg [WIDTH+FRAC-1:0] wr_br;\n");
       fprintf(fd, "    always @(posedge clk) wr_br <= w_real * b_real;\n");
-      fprintf(fd, "    reg [WIDTH*2-1:0] wi_bi;\n");
+      fprintf(fd, "    reg [WIDTH+FRAC-1:0] wi_bi;\n");
       fprintf(fd, "    always @(posedge clk) wi_bi <= w_imag * b_imag;\n");
-      fprintf(fd, "    reg [WIDTH*2-1:0] wr_bi;\n");
+      fprintf(fd, "    reg [WIDTH+FRAC-1:0] wr_bi;\n");
       fprintf(fd, "    always @(posedge clk) wr_bi <= w_real * b_imag;\n");
-      fprintf(fd, "    reg [WIDTH*2-1:0] wi_br;\n");
+      fprintf(fd, "    reg [WIDTH+FRAC-1:0] wi_br;\n");
       fprintf(fd, "    always @(posedge clk) wi_br <= w_imag * b_real;\n");
-      fprintf(fd, "    assign o_real = a_real + (wr_br>>>FRAC) - (wi_bi>>>FRAC);\n");
-      fprintf(fd, "    assign o_imag = a_imag + (wr_bi>>>FRAC) + (wi_br>>>FRAC);\n");
+      fprintf(fd, "    // Second clock.\n");
+      fprintf(fd, "    localparam [WIDTH+FRAC-1:0] R0_5 = 1 << (FRAC-1);\n");
+      fprintf(fd, "    always @(posedge clk) o_real <= a_real_r + ((wr_br - wi_bi + R0_5) >>> FRAC);\n");
+      fprintf(fd, "    always @(posedge clk) o_imag <= a_imag_r + ((wr_bi + wi_br + R0_5) >>> FRAC);\n");
+      fprintf(fd, "    reg in_ready_d;\n");
       fprintf(fd, "    always @(posedge clk)\n");
-      fprintf(fd, "       if (reset) out_ready <= 1'b0;\n");
-      fprintf(fd, "       else       out_ready <= in_ready;\n");
+      fprintf(fd, "       if (reset) begin\n");
+      fprintf(fd, "         out_ready  <= 1'b0;\n");
+      fprintf(fd, "         in_ready_d <= 1'b0;\n");
+      fprintf(fd, "       end else begin\n");
+      fprintf(fd, "         in_ready_d <= in_ready;\n");
+      fprintf(fd, "         out_ready  <= in_ready_d;\n");
+      fprintf(fd, "       end\n");
       fprintf(fd, "endmodule\n");
 }
 
@@ -206,7 +257,7 @@ std::string idft_math_recursive_gen(FILE*fd, const size_t N, const char*base_nam
 	    fprintf(fd, "    wire complex_t %s = {src_real[%zu], src_imag[%zu]};\n", a_name, src[0], src[0]);
 	    fprintf(fd, "    wire complex_t %s = {src_real[%zu], src_imag[%zu]};\n", b_name, src[1], src[1]);
 
-	    fprintf(fd, "    reg complex_t %s;\n", out_name);
+	    fprintf(fd, "    complex_t     %s;\n", out_name);
 	    fprintf(fd, "    reg           %s_ready;\n", out_name);
 	    fprintf(fd, "    always @(posedge clk) begin\n");
 	    fprintf(fd, "       %s.creal <= %s.creal + (dft_idx[0]? -%s.creal : %s.creal);\n",
