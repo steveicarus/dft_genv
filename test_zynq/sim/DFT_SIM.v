@@ -34,6 +34,8 @@
 module DFT_SIM;
 
    localparam REGS_ADDR_WIDTH = 24;
+   localparam DFT_WIDTH = 20;
+   localparam DFT_FRAC  =  8;
 
    initial $dumpvars;
 
@@ -101,7 +103,7 @@ module DFT_SIM;
       .IRQ    (regs_irq)
       /* */);
 
-   DFT_FPGA #(.ADDR_WIDTH(REGS_ADDR_WIDTH)) dft_fpga
+   DFT_FPGA #(.ADDR_WIDTH(REGS_ADDR_WIDTH), .DFT_WIDTH(DFT_WIDTH), .DFT_FRAC(DFT_FRAC)) dft_fpga
      (// Global signals
       .AXI_S_ACLK   (global_aclk),
       .AXI_S_ARESETn(global_areset_n),
