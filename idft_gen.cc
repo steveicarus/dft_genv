@@ -281,13 +281,17 @@ std::string idft_math_recursive_gen(FILE*fd, const size_t N, const char*base_nam
       string e = idft_math_recursive_gen(fd, N/2, base_name, src_e);
       string o = idft_math_recursive_gen(fd, N/2, base_name, src_o);
       char w_name[512];
-      snprintf(w_name, sizeof w_name, "w_N%zu_s%zu", N, src[0]);
+      snprintf(w_name, sizeof w_name, "w_N%zu", N);
+      if (src[0] == 0) {
+	      // If the W<N> table for this N level has not been
+	      // instantiated yet, instantiate it here.
+	    fprintf(fd, "    wire complex_t %s;\n", w_name);
+	    fprintf(fd, "    %s$W%zu #(.WIDTH(WIDTH), .FRAC(FRAC)) %s_table(clk, dft_idx[%zu:0], %s);\n",
+		    base_name, N, w_name, clog2(N)-1, w_name);
+      }
       fprintf(fd, "     // %s ==  %s + pow(W%zu, idx) * %s (blend)\n",
 	      out_name, e.c_str(), N, o.c_str());
       fprintf(fd, "    wire complex_t %s;\n", out_name);
-      fprintf(fd, "    wire complex_t %s;\n", w_name);
-      fprintf(fd, "    %s$W%zu #(.WIDTH(WIDTH), .FRAC(FRAC)) %s_table(clk, dft_idx[%zu:0], %s);\n",
-	      base_name, N, w_name, clog2(N)-1, w_name);
       fprintf(fd, "    wire %s_in_ready = %s_ready & %s_ready;\n", out_name, e.c_str(), o.c_str());
       fprintf(fd, "    wire %s_ready;\n", out_name);
       fprintf(fd, "    %s$blend_math #(.WIDTH(WIDTH), .FRAC(FRAC)) %s_math\n",
