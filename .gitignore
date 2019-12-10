@@ -22,3 +22,7 @@ test_zynq/sim/dft_sim.out
 test_zynq/sim/dft_master
 test_zynq/ver/BUILD.v
 test_zynq/ver/idft_slice.v
+
+test_zynq/DFTZynq/DFTZynq.cache
+test_zynq/DFTZynq/DFTZynq.runs
+test_zynq/DFTZynq/DFTZynq.sdk/System_wrapper.hdf

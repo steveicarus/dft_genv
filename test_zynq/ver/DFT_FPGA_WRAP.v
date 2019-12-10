@@ -33,7 +33,6 @@
 module DFT_FPGA_WRAP
   #(parameter ADDR_WIDTH = 24,
     parameter BURST_LEN_ORDER = 4,
-    parameter DFT_SAMPLES = 32,
     parameter DFT_WIDTH   = 24,
     parameter DFT_FRAC    =  8
     /* */)
@@ -71,7 +70,6 @@ module DFT_FPGA_WRAP
 
    DFT_FPGA #(.ADDR_WIDTH(ADDR_WIDTH),
 	      .BURST_LEN_ORDER(BURST_LEN_ORDER),
-	      .DFT_SAMPLES(DFT_SAMPLES),
 	      .DFT_WIDTH(DFT_WIDTH),
 	      .DFT_FRAC(DFT_FRAC)) dft_fpga_wrapped
      (.AXI_S_ACLK(AXI_S_ACLK),
